@@ -4,15 +4,10 @@ from django.contrib.contenttypes.models import ContentType
 from django.db.models.signals import post_migrate
 from django.dispatch import receiver
 from django.conf import settings
-from .models import CustomUser
+from registration_app.models import CustomUser
 from courses_app.models import Course
-from rest_framework.permissions import BasePermission
 
 logger = logging.getLogger(__name__)
-
-class IsInstructor(BasePermission):
-    def has_permission(self, request, view):
-        return bool(request.user and request.user.is_authenticated and getattr(request.user, "is_instructor", False))
 
 @receiver(post_migrate)
 def setup_instructor_group(sender, **kwargs):
@@ -47,11 +42,3 @@ def setup_instructor_group(sender, **kwargs):
             logger.info(f"User {user.username} added to 'Instructors' group.")
         except CustomUser.DoesNotExist:
             logger.warning(f"User '{settings.INSTRUCTOR_USERNAME}' does not exist yet.")
-
-class IsStudent(BasePermission):
-    def has_permission(self, request, view):
-        return bool(request.user and request.user.is_authenticated and getattr(request.user, "is_student", False))
-
-class IsAdminUser(BasePermission):
-    def has_permission(self, request, view):
-        return bool(request.user and request.user.is_authenticated and request.user.is_staff)

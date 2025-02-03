@@ -51,16 +51,27 @@ INSTALLED_APPS = [
     # 'payment_app',
 ]
 
+
 REST_FRAMEWORK = {
-    'DEFAULT_AUTHENTICATION_CLASSES': (
-        'rest_framework.authentication.SessionAuthentication',
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        # For token-based authentication (e.g., users with tokens)
         'rest_framework.authentication.TokenAuthentication',
-    ),
-    'DEFAULT_PERMISSION_CLASSES': (
-        'rest_framework.permissions.IsAuthenticated',
-    ),
+        # For session-based authentication (e.g., browser login)
+        'rest_framework.authentication.SessionAuthentication',
+    ],
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.IsAuthenticated',  # Require login by default
+    ],
 }
 
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'swagger',
+    'VERSION': '1.0.0',
+    'SERVE_INCLUDE_SCHEMA': False,
+    'COMPONENT_SPLIT_REQUEST': True,
+    # Enable the "Authorize" button in Swagger
+    'SECURITY': [{'Bearer': []}],
+}
 
 
 MIDDLEWARE = [
@@ -148,6 +159,7 @@ STATIC_URL = 'static/'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 AUTH_USER_MODEL = 'registration_app.CustomUser'
+INSTRUCTOR_USERNAME = "instructor_user"
 CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOW_METHODS = [
     'GET',

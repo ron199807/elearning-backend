@@ -20,12 +20,17 @@ from django.urls import path, include
 from .swagger import schema_view
 from registration_app.views import LoginView, LogoutView
 from courses_app.views import CourseEnrollmentView, CourseRetrieveUpdateDestroyView, CourseListCreateView
+from rest_framework.authtoken.views import obtain_auth_token
+from registration_app.views import home
+
+
 
 urlpatterns = [
+    path('', home, name='home'),
     path('admin/', admin.site.urls),
     # path('api/user/', include('user_app.urls')),
     path('registration/', include('registration_app.urls')),
-    path('login/', LoginView.as_view(), name='login'),
+    path('accounts/login/', LoginView.as_view(), name='login'),
     path('logout/', LogoutView.as_view(), name='logout'),
 
     path('courses/', include('courses_app.urls')),
@@ -33,6 +38,8 @@ urlpatterns = [
     path('enroll/', CourseEnrollmentView.as_view(), name='course-enrollment'),
     path('courses/', CourseListCreateView.as_view(), name='course-list-create'),
     # path('api/payment/', include('payment_app.urls')),
+
+     path('api-token-auth/', obtain_auth_token, name='api_token_auth'),
 
     # Swagger URLs
     path('swagger/', schema_view.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'),
