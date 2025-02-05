@@ -1,57 +1,21 @@
-# registration_app/admin.py
-
 from django.contrib import admin
-from django.contrib.auth import get_user_model
-from django.contrib.auth.admin import UserAdmin
-from rest_framework.authtoken.models import Token
+from .models import Course, Category
 
-# Get your custom user model
-User = get_user_model()
+# Register the Category model
+@admin.register(Category)
+class CategoryAdmin(admin.ModelAdmin):
+    list_display = ('name', 'description')
+    search_fields = ('name',)
+    ordering = ('name',)
 
-class CustomUserAdmin(UserAdmin):
-    # Customize the admin form if needed
-    list_display = ('username', 'email', 'first_name', 'last_name', 'is_staff', 'is_active')
-    search_fields = ('username', 'email')
-    ordering = ('-date_joined',)
-    filter_horizontal = ()
-    list_filter = ('is_staff', 'is_active')
+# Register the Course model
+@admin.register(Course)
+class CourseAdmin(admin.ModelAdmin):
+    list_display = ('title', 'instructor', 'price', 'created_at')
+    list_filter = ('instructor', 'created_at')
+    search_fields = ('title', 'description')
+    ordering = ('title',)
+    filter_horizontal = ('students',)  # For many-to-many fields
 
-# Register the custom user model with the custom admin interface
-admin.site.register(User, CustomUserAdmin)
-# Register the Token model
-admin.site.register(Token)
-
-# registration_app/admin.py
-
-from django.contrib import admin
-from django.contrib.auth import get_user_model
-from django.contrib.auth.admin import UserAdmin
-from rest_framework.authtoken.models import Token
-
-# Get your custom user model
-User = get_user_model()
-
-class CustomUserAdmin(UserAdmin):
-    list_display = ('username', 'email', 'first_name', 'last_name', 'is_staff', 'is_active')
-    search_fields = ('username', 'email')
-    ordering = ('-date_joined',)
-    filter_horizontal = ()
-    list_filter = ('is_staff', 'is_active')
-
-# Register the custom user model with the custom admin interface
-# admin.site.register(User, CustomUserAdmin)
-
-# Register the Token model to manage tokens in the admin
-# admin.site.register(Token)
-
-
-
-
-
-
-
-
-
-
-
-
+    class CourseAdmin(admin.ModelAdmin):
+        filter_horizontal = ('students',)  # Adds a nice widget for selecting students

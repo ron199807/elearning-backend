@@ -9,7 +9,7 @@ https://docs.djangoproject.com/en/5.1/topics/settings/
 For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.1/ref/settings/
 """
-
+import os
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -64,13 +64,15 @@ REST_FRAMEWORK = {
     ],
 }
 
-SPECTACULAR_SETTINGS = {
-    'TITLE': 'swagger',
-    'VERSION': '1.0.0',
-    'SERVE_INCLUDE_SCHEMA': False,
-    'COMPONENT_SPLIT_REQUEST': True,
-    # Enable the "Authorize" button in Swagger
-    'SECURITY': [{'Bearer': []}],
+SWAGGER_SETTINGS = {
+    'SECURITY_DEFINITIONS': {
+        'Token': {
+            'type': 'apiKey',
+            'name': 'Authorization',
+            'in': 'header',
+        },
+    },
+    'USE_SESSION_AUTH': False,  # Disable session authentication in Swagger
 }
 
 
@@ -172,4 +174,23 @@ CORS_ALLOW_METHODS = [
 CORS_ALLOW_HEADERS = [
     'Authorization',
     'Content-Type',
+]
+
+# APP_DIRS = True
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+TEMPLATES = [
+    {
+        'BACKEND': 'django.template.backends.django.DjangoTemplates',
+        'DIRS': [os.path.join(BASE_DIR, 'templates')],  # Add this line
+        'APP_DIRS': True,  # This ensures Django looks for templates in app directories
+        'OPTIONS': {
+            'context_processors': [
+                'django.template.context_processors.debug',
+                'django.template.context_processors.request',
+                'django.contrib.auth.context_processors.auth',
+                'django.contrib.messages.context_processors.messages',
+            ],
+        },
+    },
 ]

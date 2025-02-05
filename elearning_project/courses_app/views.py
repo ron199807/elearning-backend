@@ -29,7 +29,7 @@ class CategoryRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
 class CourseListCreateView(generics.ListCreateAPIView):
     queryset = Course.objects.all()
     serializer_class = CourseSerializer
-    permission_classes = [IsAuthenticated, IsInstructor]
+    permission_classes = [IsAuthenticated]
 
     def perform_create(self, serializer):
         serializer.save(instructor=self.request.user)  # Set the instructor as the logged-in user
@@ -37,7 +37,7 @@ class CourseListCreateView(generics.ListCreateAPIView):
 class CourseRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Course.objects.all()
     serializer_class = CourseSerializer
-    permission_classes = [IsAuthenticated, IsInstructor]
+    permission_classes = [IsAuthenticated]
 
 
 
@@ -63,7 +63,6 @@ class CourseEnrollmentView(APIView):
 def student_dashboard(request):
     return Response({"message": "Welcome to the student dashboard"})
 
-# bbudo token b3698f1a0c2b428cf71b45a7a7f02a0dd28541ad
 
 
 
