@@ -17,9 +17,11 @@ class Category(models.Model):
 
 class Course(models.Model):
     title = models.CharField(max_length=255)
+    image = models.ImageField(upload_to='course_images/', null=True, blank=True)
     slug = models.SlugField(unique=True, blank=True)
     description = models.TextField()
     price = models.DecimalField(max_digits=10, decimal_places=2)
+    is_paid = models.BooleanField(default=False) 
     instructor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="courses")
     students = models.ManyToManyField(settings.AUTH_USER_MODEL, related_name="enrolled_courses", blank=True)
     created_at = models.DateTimeField(auto_now_add=True)

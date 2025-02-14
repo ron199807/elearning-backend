@@ -86,6 +86,11 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'corsheaders.middleware.CorsMiddleware',
 
+
+]
+
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:8080",  # Add your Vue.js frontend URL
 ]
 
 ROOT_URLCONF = 'elearning_project.urls'
@@ -179,6 +184,10 @@ CORS_ALLOW_HEADERS = [
 # APP_DIRS = True
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
+# for image handling
+MEDIA_URL = '/media/'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
@@ -194,3 +203,5 @@ TEMPLATES = [
         },
     },
 ]
+
+
