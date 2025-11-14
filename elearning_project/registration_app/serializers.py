@@ -1,7 +1,7 @@
-# accounts/serializers.py
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
+from .models import CustomUser
 
 User = get_user_model()
 
@@ -22,3 +22,8 @@ class RegisterSerializer(serializers.ModelSerializer):
             role=validated_data.get('role', 'student'),
         )
         return user
+
+class CustomUserSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CustomUser
+        fields = ['id', 'username', 'email', 'role', 'is_staff', 'is_instructor']

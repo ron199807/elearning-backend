@@ -25,7 +25,7 @@ SECRET_KEY = 'django-insecure-w30mb%8ymwe+^2v^a6e0gukgi!60^6_cxle%lgnx^2#(tugh10
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['localhost', '127.0.0.1', '0.0.0.0']
 
 
 # Application definition
@@ -43,6 +43,8 @@ INSTALLED_APPS = [
     'drf_yasg',
     'rest_framework.authtoken',
     'corsheaders',
+    'import_export',
+    'django_filters',
 
     # Custom apps
     # 'user_app',
@@ -54,13 +56,11 @@ INSTALLED_APPS = [
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
-        # For token-based authentication (e.g., users with tokens)
         'rest_framework.authentication.TokenAuthentication',
-        # For session-based authentication (e.g., browser login)
         'rest_framework.authentication.SessionAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.IsAuthenticated',  # Require login by default
+        'rest_framework.permissions.IsAuthenticated',
     ],
 }
 
@@ -72,11 +72,12 @@ SWAGGER_SETTINGS = {
             'in': 'header',
         },
     },
-    'USE_SESSION_AUTH': False,  # Disable session authentication in Swagger
+    'USE_SESSION_AUTH': False,
 }
 
 
 MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -84,13 +85,49 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'corsheaders.middleware.CorsMiddleware',
+    
 
 
 ]
 
 CORS_ALLOWED_ORIGINS = [
-    "http://localhost:8080",  # Add your Vue.js frontend URL
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+]
+
+CSRF_TRUSTED_ORIGINS = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+]
+
+
+CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOW_METHODS = [
+    'GET',
+    'POST',
+    'PUT',
+    'PATCH',
+    'DELETE',
+    'OPTIONS',
+]
+CORS_ALLOW_HEADERS = [
+    'Authorization',
+    'Content-Type',
+]
+
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
 ]
 
 ROOT_URLCONF = 'elearning_project.urls'
@@ -98,7 +135,7 @@ ROOT_URLCONF = 'elearning_project.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
+        'DIRS': [os.path.join(BASE_DIR, 'templates')],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -164,22 +201,7 @@ STATIC_URL = 'static/'
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
 
-DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
-AUTH_USER_MODEL = 'registration_app.CustomUser'
-INSTRUCTOR_USERNAME = "instructor_user"
-CORS_ALLOW_ALL_ORIGINS = True
-CORS_ALLOW_METHODS = [
-    'GET',
-    'POST',
-    'PUT',
-    'PATCH',
-    'DELETE',
-    'OPTIONS',
-]
-CORS_ALLOW_HEADERS = [
-    'Authorization',
-    'Content-Type',
-]
+
 
 # APP_DIRS = True
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -188,20 +210,6 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
-TEMPLATES = [
-    {
-        'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [os.path.join(BASE_DIR, 'templates')],  # Add this line
-        'APP_DIRS': True,  # This ensures Django looks for templates in app directories
-        'OPTIONS': {
-            'context_processors': [
-                'django.template.context_processors.debug',
-                'django.template.context_processors.request',
-                'django.contrib.auth.context_processors.auth',
-                'django.contrib.messages.context_processors.messages',
-            ],
-        },
-    },
-]
-
-
+DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+AUTH_USER_MODEL = 'registration_app.CustomUser'
+INSTRUCTOR_USERNAME = "instructor_user"

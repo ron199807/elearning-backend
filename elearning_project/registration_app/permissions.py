@@ -12,7 +12,38 @@ logger = logging.getLogger(__name__)
 
 class IsInstructor(BasePermission):
     def has_permission(self, request, view):
-        return bool(request.user and request.user.is_authenticated and getattr(request.user, "is_instructor", False))
+        return bool(
+            request.user and 
+            request.user.is_authenticated and 
+            hasattr(request.user, 'role') and 
+            request.user.role == 'instructor'
+        )
+
+class IsStudent(BasePermission):
+    def has_permission(self, request, view):
+        return bool(
+            request.user and 
+            request.user.is_authenticated and 
+            hasattr(request.user, 'role') and 
+            request.user.role == 'student'
+        )
+
+class IsAdminUser(BasePermission):
+    def has_permission(self, request, view):
+        return bool(
+            request.user and 
+            request.user.is_authenticated and 
+            hasattr(request.user, 'role') and 
+            request.user.role == 'admin'
+        )
+
+# Optional: Create a flexible permission for enrollment
+class CanEnrollInCourse(BasePermission):
+    """
+    Allow any authenticated user to enroll in courses
+    """
+    def has_permission(self, request, view):
+        return bool(request.user and request.user.is_authenticated)
 
 @receiver(post_migrate)
 def setup_instructor_group(sender, **kwargs):
@@ -47,11 +78,3 @@ def setup_instructor_group(sender, **kwargs):
             logger.info(f"User {user.username} added to 'Instructors' group.")
         except CustomUser.DoesNotExist:
             logger.warning(f"User '{settings.INSTRUCTOR_USERNAME}' does not exist yet.")
-
-class IsStudent(BasePermission):
-    def has_permission(self, request, view):
-        return bool(request.user and request.user.is_authenticated and getattr(request.user, "is_student", False))
-
-class IsAdminUser(BasePermission):
-    def has_permission(self, request, view):
-        return bool(request.user and request.user.is_authenticated and request.user.is_staff)

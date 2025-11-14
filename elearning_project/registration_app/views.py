@@ -1,10 +1,13 @@
 from django.shortcuts import render
-
 from rest_framework import generics, permissions
 from django.contrib.auth import get_user_model
 from .serializers import RegisterSerializer
 from rest_framework.response import Response
 from rest_framework.authtoken.models import Token
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
+from .serializers import CustomUserSerializer
 
 #login imports
 from rest_framework.authtoken.views import ObtainAuthToken
@@ -17,6 +20,7 @@ from rest_framework.authentication import TokenAuthentication
 from rest_framework.permissions import IsAuthenticated
 from django.http import HttpResponse
 from django.contrib.auth.views import LoginView
+
 
 class CustomLoginView(LoginView):
     template_name = 'registration/login.html'
@@ -53,3 +57,11 @@ class LogoutView(APIView):
     def post(self, request):
         request.auth.delete()  # Delete the token
         return Response({"message": "Logged out successfully"}, status=200)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def user_profile(request):
+    serializer = CustomUserSerializer(request.user)
+    return Response(serializer.data)
+
