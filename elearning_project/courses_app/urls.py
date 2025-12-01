@@ -8,7 +8,7 @@ from .views import (
     CourseSearchView,
     LessonRetrieveUpdateDestroyView,
     CourseModuleRetrieveUpdateDestroyView,
-    MarkLessonComplete, CourseProgressCreateView, EnrollmentProgressView,
+    MarkLessonComplete, CourseProgressCreateView, EnrollmentProgressView, MarkCourseCompleteView
 
 )
 
@@ -28,6 +28,7 @@ urlpatterns = [
     # Course Modules
     path('courses/<int:course_id>/modules/', CourseModuleCreateView.as_view(), name='module-list'),
     path('modules/<int:pk>/', CourseModuleRetrieveUpdateDestroyView.as_view(), name='module-detail'),
+    path('courses/<int:course_id>/complete/', MarkCourseCompleteView.as_view(), name='mark-course-complete'),
     
     # Lessons
     path('modules/<int:module_id>/lessons/', LessonCreateView.as_view(), name='lesson-list'),

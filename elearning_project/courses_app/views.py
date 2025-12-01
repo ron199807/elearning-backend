@@ -997,3 +997,58 @@ class LessonVideoInfoView(APIView):
         ).first()
         
         return enrollment is not None
+    
+
+class MarkCourseCompleteView(APIView):
+    """Mark a course as completed for the current user"""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, course_id):
+        try:
+            course = get_object_or_404(Course, id=course_id)
+            user = request.user
+            
+            # Get user's enrollment
+            enrollment = Enrollment.objects.filter(
+                user=user,
+                course=course
+            ).first()
+            
+            if not enrollment:
+                return Response(
+                    {"error": "You are not enrolled in this course."},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+            
+            # Mark enrollment as completed
+            enrollment.completed = True
+            enrollment.completed_at = timezone.now()
+            enrollment.save()
+            
+            # Mark all lessons in the course as completed
+            lessons = Lesson.objects.filter(module__course=course)
+            for lesson in lessons:
+                progress, created = CourseProgress.objects.get_or_create(
+                    enrollment=enrollment,
+                    lesson=lesson,
+                    defaults={
+                        'completed': True,
+                        'completed_at': timezone.now()
+                    }
+                )
+                if not progress.completed:
+                    progress.completed = True
+                    progress.completed_at = timezone.now()
+                    progress.save()
+            
+            serializer = EnrollmentSerializer(enrollment, context={'request': request})
+            return Response({
+                "message": "Course marked as completed successfully",
+                "enrollment": serializer.data
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
