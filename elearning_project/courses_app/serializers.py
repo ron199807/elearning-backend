@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Course, Category, CourseModule, Lesson, CourseMaterial, Enrollment, CourseProgress
+from .models import Course, Category, CourseModule, Lesson, CourseMaterial, Enrollment, CourseProgress, Certificate
 from django.utils import timezone
 from django.contrib.humanize.templatetags.humanize import naturaltime
 
@@ -515,3 +515,74 @@ class CourseProgressSerializer(serializers.ModelSerializer):
             'completed', 'completed_at', 'time_spent', 'last_accessed', 'course_title'
         ]
         read_only_fields = ['completed_at', 'time_spent', 'last_accessed']
+
+
+class CertificateSerializer(serializers.ModelSerializer):
+    """Serializer for certificates"""
+    verification_url = serializers.SerializerMethodField()
+    course_slug = serializers.SerializerMethodField()
+    platform_name = serializers.SerializerMethodField()
+    issued_date_formatted = serializers.SerializerMethodField()
+    completion_date_formatted = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Certificate
+        fields = [
+            'id',
+            'certificate_id',
+            'issued_at',
+            'verification_token',
+            'verification_url',
+            'is_verified',
+            
+            # Certificate data
+            'student_name',
+            'student_email',
+            'course_title',
+            'course_duration',
+            'instructor_name',
+            'completion_date',
+            'completion_date_formatted',
+            'course_description',
+            'grade',
+            'final_score',
+            'certificate_text',
+            
+            # Additional context
+            'course_slug',
+            'platform_name',
+            'issued_date_formatted',
+        ]
+        read_only_fields = [
+            'certificate_id', 'issued_at', 'verification_token',
+            'verification_url', 'is_verified'
+        ]
+    
+    def get_verification_url(self, obj):
+        request = self.context.get('request')
+        if request:
+            return f"{request.scheme}://{request.get_host()}/api/certificates/verify/{obj.verification_token}/"
+        return obj.verification_url
+    
+    def get_course_slug(self, obj):
+        return obj.enrollment.course.slug
+    
+    def get_platform_name(self, obj):
+        return "BTEE eLearning Platform"
+    
+    def get_issued_date_formatted(self, obj):
+        return obj.issued_at.strftime('%B %d, %Y')
+    
+    def get_completion_date_formatted(self, obj):
+        return obj.completion_date.strftime('%B %d, %Y')
+
+class CertificateCreateSerializer(serializers.ModelSerializer):
+    """Serializer for creating certificates"""
+    class Meta:
+        model = Certificate
+        fields = [
+            'grade',
+            'final_score',
+            'certificate_text',
+        ]
+        optional_fields = ['grade', 'final_score', 'certificate_text']

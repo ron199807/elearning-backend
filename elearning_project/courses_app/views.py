@@ -4,7 +4,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny, IsAuthenticatedOrReadOnly
 from rest_framework.views import APIView
 from rest_framework.decorators import api_view, permission_classes
-from .models import Course, Category, CourseModule, Lesson, CourseMaterial, Enrollment, CourseProgress
+from .models import Course, Category, CourseModule, Lesson, CourseMaterial, Enrollment, CourseProgress, Certificate
 from django.http import StreamingHttpResponse, HttpResponse
 from django.views.decorators.http import require_http_methods
 from wsgiref.util import FileWrapper
@@ -13,7 +13,7 @@ from django.conf import settings
 from django.utils.encoding import smart_str
 from .serializers import (
     CourseSerializer, CategorySerializer, CourseModuleSerializer,
-    LessonSerializer, CourseMaterialSerializer, EnrollmentSerializer, CourseProgressSerializer, CourseDetailSerializer, CourseCreateSerializer, CourseListSerializer
+    LessonSerializer, CourseMaterialSerializer, EnrollmentSerializer, CourseProgressSerializer, CourseDetailSerializer, CourseCreateSerializer, CourseListSerializer, CertificateSerializer, CertificateCreateSerializer
 )
 from registration_app.permissions import IsInstructor, IsAdminUser, IsStudent, CanEnrollInCourse
 from rest_framework import serializers
@@ -1041,11 +1041,178 @@ class MarkCourseCompleteView(APIView):
                     progress.completed_at = timezone.now()
                     progress.save()
             
+            # Check if certificate should be auto-created
+            auto_create_certificate = request.data.get('auto_create_certificate', False)
+            certificate_data = None
+            
+            if auto_create_certificate and course.certificate_available:
+                # Create certificate using existing view logic
+                certificate_view = CertificateCreateView()
+                certificate_view.request = request
+                certificate_response = certificate_view.post(request, enrollment.id)
+                if certificate_response.status_code == 201:
+                    certificate_data = certificate_response.data
+            
             serializer = EnrollmentSerializer(enrollment, context={'request': request})
-            return Response({
+            response_data = {
                 "message": "Course marked as completed successfully",
-                "enrollment": serializer.data
-            }, status=status.HTTP_200_OK)
+                "enrollment": serializer.data,
+                "certificate_available": course.certificate_available
+            }
+            
+            if certificate_data:
+                response_data["certificate"] = certificate_data
+            
+            return Response(response_data, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+        
+
+class CertificateListView(generics.ListAPIView):
+    """Get all certificates for current user"""
+    serializer_class = CertificateSerializer
+    permission_classes = [IsAuthenticated]
+    
+    def get_queryset(self):
+        return Certificate.objects.filter(
+            enrollment__user=self.request.user
+        ).select_related(
+            'enrollment',
+            'enrollment__course',
+            'enrollment__course__instructor'
+        )
+    
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context['request'] = self.request
+        return context
+
+class CertificateCreateView(APIView):
+    """Create certificate for completed course"""
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request, enrollment_id):
+        try:
+            # Get enrollment
+            enrollment = get_object_or_404(
+                Enrollment, 
+                id=enrollment_id, 
+                user=request.user
+            )
+            
+            # Check if course is completed
+            if not enrollment.completed:
+                return Response(
+                    {"error": "Course must be completed before generating certificate"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Check if certificate already exists
+            if hasattr(enrollment, 'certificate'):
+                certificate = enrollment.certificate
+                serializer = CertificateSerializer(certificate, context={'request': request})
+                return Response(serializer.data, status=status.HTTP_200_OK)
+            
+            # Get course details
+            course = enrollment.course
+            
+            # Create certificate
+            certificate_data = {
+                'enrollment': enrollment,
+                'student_name': request.user.get_full_name() or request.user.username,
+                'student_email': request.user.email,
+                'course_title': course.title,
+                'course_duration': course.duration or 0,
+                'instructor_name': course.instructor.get_full_name() or course.instructor.username,
+                'completion_date': enrollment.completed_at.date() if enrollment.completed_at else timezone.now().date(),
+                'course_description': course.description[:500] if course.description else "",
+                'certificate_text': f"This certifies that {request.user.get_full_name()} has successfully completed the course '{course.title}'.",
+            }
+            
+            # Add optional fields from request
+            serializer = CertificateCreateSerializer(data=request.data)
+            if serializer.is_valid():
+                certificate_data.update(serializer.validated_data)
+            
+            certificate = Certificate.objects.create(**certificate_data)
+            
+            serializer = CertificateSerializer(certificate, context={'request': request})
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+            
+        except Exception as e:
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+class CertificateDetailView(generics.RetrieveAPIView):
+    """Get certificate details"""
+    serializer_class = CertificateSerializer
+    permission_classes = [IsAuthenticated]
+    lookup_field = 'certificate_id'
+    
+    def get_queryset(self):
+        return Certificate.objects.filter(
+            enrollment__user=self.request.user
+        ).select_related(
+            'enrollment',
+            'enrollment__course'
+        )
+
+class VerifyCertificateView(APIView):
+    """Verify certificate by token (public endpoint)"""
+    permission_classes = [AllowAny]
+    
+    def get(self, request, verification_token):
+        try:
+            certificate = get_object_or_404(
+                Certificate, 
+                verification_token=verification_token,
+                is_verified=True
+            )
+            
+            serializer = CertificateSerializer(certificate, context={'request': request})
+            return Response({
+                "valid": True,
+                "certificate": serializer.data,
+                "verification_date": timezone.now().isoformat(),
+                "message": "Certificate verified successfully"
+            })
+            
+        except Certificate.DoesNotExist:
+            return Response(
+                {
+                    "valid": False,
+                    "message": "Invalid or expired certificate token"
+                },
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+class CertificateByEnrollmentView(APIView):
+    """Get certificate for specific enrollment"""
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request, enrollment_id):
+        try:
+            enrollment = get_object_or_404(
+                Enrollment,
+                id=enrollment_id,
+                user=request.user
+            )
+            
+            if not hasattr(enrollment, 'certificate'):
+                return Response(
+                    {"error": "No certificate found for this enrollment"},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+            
+            certificate = enrollment.certificate
+            serializer = CertificateSerializer(certificate, context={'request': request})
+            return Response(serializer.data)
             
         except Exception as e:
             return Response(

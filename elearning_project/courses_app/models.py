@@ -4,6 +4,7 @@ from django.utils.text import slugify
 from django.core.exceptions import ValidationError
 import json
 from django.utils import timezone
+import secrets
 
 class Category(models.Model):
     name = models.CharField(max_length=100, unique=True)
@@ -62,6 +63,7 @@ class Course(models.Model):
     featured = models.BooleanField(default=False)
     max_students = models.PositiveIntegerField(default=0)  # 0 means unlimited
     currency = models.CharField(max_length=3, default='USD')
+    is_published = models.BooleanField(default=False)
     
     # Discount fields
     has_discount = models.BooleanField(default=False)
@@ -250,3 +252,67 @@ class CourseProgress(models.Model):
 
     def __str__(self):
         return f"{self.enrollment.user.username} - {self.lesson.title}"
+
+class Certificate(models.Model):
+    """Model for course completion certificates"""
+    enrollment = models.OneToOneField(
+        Enrollment, 
+        on_delete=models.CASCADE, 
+        related_name='certificate'
+    )
+    certificate_id = models.CharField(max_length=50, unique=True)
+    issued_at = models.DateTimeField(auto_now_add=True)
+    verification_token = models.CharField(max_length=100, unique=True)
+    is_verified = models.BooleanField(default=True)
+    
+    # Certificate data (for API response)
+    student_name = models.CharField(max_length=255)
+    student_email = models.EmailField()
+    course_title = models.CharField(max_length=255)
+    course_duration = models.PositiveIntegerField(default=0)
+    instructor_name = models.CharField(max_length=255)
+    completion_date = models.DateField()
+    course_description = models.TextField(blank=True)
+    
+    # Optional metadata
+    grade = models.CharField(max_length=10, blank=True, null=True)
+    final_score = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
+    certificate_text = models.TextField(blank=True)
+    
+    class Meta:
+        ordering = ['-issued_at']
+        indexes = [
+            models.Index(fields=['certificate_id']),
+            models.Index(fields=['verification_token']),
+        ]
+    
+    def __str__(self):
+        return f"Certificate {self.certificate_id} - {self.student_name}"
+    
+    def save(self, *args, **kwargs):
+        if not self.certificate_id:
+            self.certificate_id = self.generate_certificate_id()
+        if not self.verification_token:
+            self.verification_token = self.generate_verification_token()
+        super().save(*args, **kwargs)
+    
+    def generate_certificate_id(self):
+        """Generate unique certificate ID"""
+        import random
+        import string
+        import time
+        
+        timestamp = int(time.time())
+        random_str = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+        return f"CERT-{timestamp}-{random_str}"
+    
+    def generate_verification_token(self):
+        """Generate verification token for certificate validation"""
+        return secrets.token_urlsafe(32)
+    
+    @property
+    def verification_url(self):
+        """Generate verification URL for this certificate"""
+        from django.conf import settings
+        base_url = getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')
+        return f"{base_url}/verify-certificate/{self.verification_token}/"

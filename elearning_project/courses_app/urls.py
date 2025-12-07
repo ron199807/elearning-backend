@@ -8,7 +8,7 @@ from .views import (
     CourseSearchView,
     LessonRetrieveUpdateDestroyView,
     CourseModuleRetrieveUpdateDestroyView,
-    MarkLessonComplete, CourseProgressCreateView, EnrollmentProgressView, MarkCourseCompleteView
+    MarkLessonComplete, CourseProgressCreateView, EnrollmentProgressView, MarkCourseCompleteView, CertificateListView, CertificateCreateView, CertificateDetailView, VerifyCertificateView, CertificateByEnrollmentView
 
 )
 
@@ -72,4 +72,11 @@ urlpatterns = [
     
     # Alternative URL pattern for the React component
     path('lessons/<int:lesson_id>/video/', views.VideoStreamView.as_view(), name='lesson-video'),
+
+    # Certificate URLs
+    path('certificates/', CertificateListView.as_view(), name='user-certificates'),
+    path('certificates/create/<int:enrollment_id>/', CertificateCreateView.as_view(), name='create-certificate'),
+    path('certificates/<str:certificate_id>/', CertificateDetailView.as_view(), name='certificate-detail'),
+    path('certificates/verify/<str:verification_token>/', VerifyCertificateView.as_view(), name='verify-certificate'),
+    path('certificates/enrollment/<int:enrollment_id>/', CertificateByEnrollmentView.as_view(), name='certificate-by-enrollment'),
 ]
