@@ -5,6 +5,27 @@ from rest_framework.authtoken.views import obtain_auth_token
 from drf_yasg.views import get_schema_view
 from drf_yasg import openapi
 from rest_framework import permissions
+from django.views.decorators.csrf import csrf_exempt
+from django.http import JsonResponse
+from django.middleware.csrf import get_token
+
+@csrf_exempt
+def debug_csrf(request):
+    """Debug endpoint to check CSRF configuration"""
+    csrf_token = get_token(request) if hasattr(request, 'csrf_token') else None
+    
+    return JsonResponse({
+        'csrf_token_available': bool(csrf_token),
+        'csrf_token': csrf_token,
+        'cookies': dict(request.COOKIES),
+        'headers': dict(request.headers),
+        'is_secure': request.is_secure(),
+        'scheme': request.scheme,
+        'method': request.method,
+        'path': request.path,
+        'host': request.get_host(),
+        'meta_keys': list(request.META.keys()),
+    })
 
 # Swagger schema view
 schema_view = get_schema_view(

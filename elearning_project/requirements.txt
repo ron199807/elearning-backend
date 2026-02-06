@@ -1,0 +1,37 @@
+﻿# Core Django
+Django==5.2.7
+djangorestframework==3.15.2
+djangorestframework-simplejwt==5.5.0
+
+# API Documentation
+drf-yasg==1.21.10
+
+# CORS
+django-cors-headers==4.7.0
+
+# Database
+psycopg2-binary==2.9.10
+dj-database-url==2.2.0
+
+# Image Processing
+Pillow==11.1.0
+
+# Environment
+python-dotenv==1.1.0
+
+# Production
+gunicorn==23.0.0
+
+# Dependencies
+asgiref==3.8.1
+sqlparse==0.5.3
+pytz==2025.1
+whitenoise==6.5.0
+
+# Elastic Beanstalk
+django-storages==1.14.0
+boto3==1.28.39
+
+# import/export
+django-import-export==3.3.1
+django-filter==23.2

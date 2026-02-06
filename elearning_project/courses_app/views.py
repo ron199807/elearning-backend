@@ -291,10 +291,11 @@ class LessonRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
 
     def get_queryset(self):
         # For instructors, only show lessons from their courses
-        if self.request.user.role == 'instructor':
+        # authentication check
+        if self.request.user.is_authenticated and self.request.user.role == 'instructor':
             return Lesson.objects.filter(module__course__instructor=self.request.user)
         # For students, show lessons from enrolled courses
-        elif self.request.user.role == 'student':
+        elif self.request.user.is_authenticated and self.request.user.role == 'student':
             return Lesson.objects.filter(module__course__students=self.request.user)
         # Fallback for other roles
         return Lesson.objects.all()
@@ -304,7 +305,8 @@ class LessonRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
         try:
             lesson = super().get_object()
             # Additional permission check for instructors
-            if (self.request.user.role == 'instructor' and 
+            # FIX 2: Added authentication check
+            if (self.request.user.is_authenticated and self.request.user.role == 'instructor' and 
                 lesson.module.course.instructor != self.request.user):
                 raise PermissionDenied("You are not the instructor of this course.")
             return lesson
@@ -337,7 +339,8 @@ class CourseModuleRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIVie
 
     def get_queryset(self):
         # Ensure users can only access modules from their courses
-        if self.request.user.role == 'instructor':
+        # authentication check
+        if self.request.user.is_authenticated and self.request.user.role == 'instructor':
             return CourseModule.objects.filter(course__instructor=self.request.user)
         return CourseModule.objects.all()
     
@@ -462,13 +465,17 @@ class EnrollmentDetailView(generics.RetrieveUpdateDestroyAPIView):
     def get_queryset(self):
         user = self.request.user
         
-        if user.is_staff:
-            return Enrollment.objects.all()
+        # authentication check and logic
+        if user.is_authenticated:
+            if user.is_staff:
+                return Enrollment.objects.all()
+            
+            if hasattr(user, 'is_instructor') and user.is_instructor:
+                return Enrollment.objects.filter(course__instructor=user)
+            
+            return Enrollment.objects.filter(user=user)
         
-        if hasattr(user, 'is_instructor') and user.is_instructor:
-            return Enrollment.objects.filter(course__instructor=user)
-        
-        return Enrollment.objects.filter(user=user)
+        return Enrollment.objects.none()
 
 class CourseProgressListView(generics.ListAPIView):
     """List course progress for the current user"""
@@ -677,7 +684,8 @@ class CourseMaterialRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIV
 
     def get_queryset(self):
         # Ensure instructors can only access materials from their courses
-        if self.request.user.role == 'instructor':
+        # authentication check
+        if self.request.user.is_authenticated and self.request.user.role == 'instructor':
             return CourseMaterial.objects.filter(lesson__module__course__instructor=self.request.user)
         return CourseMaterial.objects.all()
 
