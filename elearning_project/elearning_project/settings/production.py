@@ -19,3 +19,5 @@ DATABASES = {
         'PORT': '5432',
     }
 }
+
+Root_URLCONF = 'elearning_project.urls.production'

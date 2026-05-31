@@ -18,6 +18,7 @@ db.sqlite3-journal
 .elasticbeanstalk/*
 !.elasticbeanstalk/config.yml
 !.ebextensions/
+btee_ec2key.pem
 
 # IDE
 .vscode/

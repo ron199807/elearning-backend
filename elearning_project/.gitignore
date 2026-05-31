@@ -1,4 +1,4 @@
-
+btee_ec2key.pem
 # Elastic Beanstalk Files
 .elasticbeanstalk/*
 !.elasticbeanstalk/*.cfg.yml

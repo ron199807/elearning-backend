@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Course, Category, CourseModule, Lesson, CourseMaterial, Enrollment, CourseProgress, Certificate
+from .models import Course, Category, CourseModule, Lesson, CourseMaterial, Enrollment, CourseProgress, Certificate, LessonVideo, LessonContentBlock
 from django.utils import timezone
 from django.contrib.humanize.templatetags.humanize import naturaltime
 
@@ -277,26 +277,103 @@ class CourseMaterialSerializer(serializers.ModelSerializer):
         if obj.file:
             return obj.file.size
         return None
+    
+
+class LessonVideoSerializer(serializers.ModelSerializer):
+    video_url_display = serializers.SerializerMethodField()
+    thumbnail_url = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = LessonVideo
+        fields = [
+            'id', 'title', 'video_url', 'video_file', 'order', 'position',
+            'thumbnail', 'thumbnail_url', 'duration', 'is_preview', 'video_url_display'
+        ]
+        read_only_fields = ['id']
+        extra_kwargs = {
+            'video_url': {'required': False, 'allow_null': True},
+            'title': {'required': False, 'allow_null': True},
+            'duration': {'required': False},
+            'thumbnail': {'required': False, 'allow_null': True},
+            'is_preview': {'required': False},
+            'position': {'required': False},
+            'video_file': {'required': False},
+            'order': {'required': False},  # Make order optional
+        }
+    
+    def to_internal_value(self, data):
+        """Convert incoming data to internal value"""
+        # If data is not a dict, return empty
+        if not isinstance(data, dict):
+            return {}
+        
+        # Create a copy to avoid modifying original
+        internal_data = {}
+        
+        # Define field mappings
+        field_mappings = {
+            'id': 'id',
+            'title': 'title',
+            'video_url': 'video_url',
+            'video_file': 'video_file',
+            'order': 'order',
+            'position': 'position',
+            'thumbnail': 'thumbnail',
+            'duration': 'duration',
+            'is_preview': 'is_preview',
+        }
+        
+        # Map only fields that exist and have non-None values
+        for internal_field, data_field in field_mappings.items():
+            if data_field in data and data[data_field] is not None:
+                # Skip empty strings for URL fields
+                if data_field == 'video_url' and data[data_field] == '':
+                    continue
+                internal_data[internal_field] = data[data_field]
+        
+        return super().to_internal_value(internal_data)
+    
+    def get_video_url_display(self, obj):
+        if obj.video_file and obj.video_file.url:
+            return obj.video_file.url
+        return obj.video_url
+    
+    def get_thumbnail_url(self, obj):
+        if obj.thumbnail:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.thumbnail.url)
+            return obj.thumbnail.url
+        return None
+    
+class LessonContentBlockSerializer(serializers.ModelSerializer):
+    video_details = LessonVideoSerializer(source='video', read_only=True)
+    
+    class Meta:
+        model = LessonContentBlock
+        fields = [
+            'id', 'block_type', 'content', 'video', 'video_details',
+            'order', 'custom_css_class'
+        ]
+        read_only_fields = ['id']
 
 class LessonSerializer(serializers.ModelSerializer):
-    materials = CourseMaterialSerializer(many=True, read_only=True)
+    videos = LessonVideoSerializer(many=True, read_only=True)
+    content_blocks = LessonContentBlockSerializer(many=True, read_only=True)
     is_completed = serializers.SerializerMethodField()
-
+    total_duration = serializers.ReadOnlyField()
+    
     class Meta:
         model = Lesson
-        fields = ['id', 'title', 'order', 'video_url', 'content', 'duration', 'materials', 'is_completed', 'is_published', 'is_preview', 'thumbnail', 'video_file']
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        # Make title not required for partial updates (PATCH)
-        if self.partial:
-            self.fields['title'].required = False
-            self.fields['content'].required = False
-
+        fields = [
+            'id', 'title', 'order', 'content', 'duration', 'total_duration',
+            'materials', 'is_completed', 'is_published', 'is_preview', 
+            'thumbnail', 'videos', 'content_blocks', 'module'
+        ]
+    
     def get_is_completed(self, obj):
         request = self.context.get('request')
         if request and request.user.is_authenticated:
-            # Check if user has completed this lesson
             progress = CourseProgress.objects.filter(
                 enrollment__user=request.user,
                 enrollment__course=obj.module.course,
@@ -305,6 +382,117 @@ class LessonSerializer(serializers.ModelSerializer):
             ).first()
             return progress is not None
         return False
+    
+
+class LessonCreateUpdateSerializer(serializers.ModelSerializer):
+    """Serializer for creating/updating lessons with videos"""
+    videos = LessonVideoSerializer(many=True, required=False)
+    content_blocks = LessonContentBlockSerializer(many=True, required=False)
+    
+    class Meta:
+        model = Lesson
+        fields = [
+            'id', 'title', 'order', 'content', 'duration', 'is_published',
+            'is_preview', 'thumbnail', 'videos', 'content_blocks'
+        ]
+        extra_kwargs = {
+            'title': {'required': False},  # Make optional for updates
+            'content': {'required': False, 'allow_null': True},
+            'duration': {'required': False},
+            'is_published': {'required': False},
+            'is_preview': {'required': False},
+            'thumbnail': {'required': False, 'allow_null': True},
+        }
+    
+    def create(self, validated_data):
+        """Create a new lesson with videos and content blocks"""
+        videos_data = validated_data.pop('videos', [])
+        content_blocks_data = validated_data.pop('content_blocks', [])
+        
+        # Get module from context
+        module = self.context.get('module')
+        
+        if not module:
+            raise serializers.ValidationError({"module": "Module is required"})
+        
+        # Create the lesson
+        lesson = Lesson.objects.create(module=module, **validated_data)
+        
+        # Create videos
+        for order, video_data in enumerate(videos_data):
+            video_data.pop('id', None)  # Remove id if present
+            LessonVideo.objects.create(lesson=lesson, order=order, **video_data)
+        
+        # Create content blocks
+        for order, block_data in enumerate(content_blocks_data):
+            block_data.pop('id', None)
+            LessonContentBlock.objects.create(lesson=lesson, order=order, **block_data)
+        
+        return lesson
+    
+    def update(self, instance, validated_data):
+        """Update an existing lesson with videos and content blocks"""
+        videos_data = validated_data.pop('videos', None)
+        content_blocks_data = validated_data.pop('content_blocks', None)
+        
+        # Update basic fields
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        
+        # Handle videos - this allows adding, updating, and deleting
+        if videos_data is not None:
+            # Track IDs that should be kept
+            kept_video_ids = []
+            
+            for video_data in videos_data:
+                video_id = video_data.pop('id', None)
+                
+                if video_id:
+                    # Update existing video
+                    try:
+                        existing_video = LessonVideo.objects.get(id=video_id, lesson=instance)
+                        for attr, value in video_data.items():
+                            setattr(existing_video, attr, value)
+                        existing_video.save()
+                        kept_video_ids.append(existing_video.id)
+                    except LessonVideo.DoesNotExist:
+                        # Create new if ID doesn't exist (shouldn't happen)
+                        new_video = LessonVideo.objects.create(lesson=instance, **video_data)
+                        kept_video_ids.append(new_video.id)
+                else:
+                    # Create new video
+                    new_video = LessonVideo.objects.create(lesson=instance, **video_data)
+                    kept_video_ids.append(new_video.id)
+            
+            # Delete videos that were not included in the update
+            instance.videos.exclude(id__in=kept_video_ids).delete()
+        
+        # Handle content blocks similarly
+        if content_blocks_data is not None:
+            kept_block_ids = []
+            
+            for block_data in content_blocks_data:
+                block_id = block_data.pop('id', None)
+                
+                if block_id:
+                    try:
+                        existing_block = LessonContentBlock.objects.get(id=block_id, lesson=instance)
+                        for attr, value in block_data.items():
+                            setattr(existing_block, attr, value)
+                        existing_block.save()
+                        kept_block_ids.append(existing_block.id)
+                    except LessonContentBlock.DoesNotExist:
+                        new_block = LessonContentBlock.objects.create(lesson=instance, **block_data)
+                        kept_block_ids.append(new_block.id)
+                else:
+                    new_block = LessonContentBlock.objects.create(lesson=instance, **block_data)
+                    kept_block_ids.append(new_block.id)
+            
+            # Delete blocks that were not included
+            instance.content_blocks.exclude(id__in=kept_block_ids).delete()
+        
+        return instance
 
 class CourseModuleSerializer(serializers.ModelSerializer):
     lessons = LessonSerializer(many=True, read_only=True)

@@ -171,22 +171,69 @@ class CourseModule(models.Model):
     def __str__(self):
         return f"{self.course.title} - {self.title}"
 
+# Update Lesson model - remove video_url and video_file fields
 class Lesson(models.Model):
     module = models.ForeignKey(CourseModule, on_delete=models.CASCADE, related_name='lessons')
     title = models.CharField(max_length=255)
     order = models.PositiveIntegerField(default=0)
-    video_url = models.URLField(blank=True, null=True)
-    video_file = models.FileField(upload_to='lesson_videos/',
-                                   blank=True,
-                                   null=True,
-                                   help_text="Upload video file for secure streaming.")
     content = models.TextField(blank=True, null=True)
-    duration = models.PositiveIntegerField(help_text="Duration in minutes", default=0)
+    duration = models.PositiveIntegerField(help_text="Total duration in minutes", default=0)
     is_published = models.BooleanField(default=False)
     is_preview = models.BooleanField(default=False)
     thumbnail = models.ImageField(upload_to='lesson_thumbnails/', null=True, blank=True)
     materials = models.ManyToManyField('CourseMaterial', related_name='lessons', blank=True)
 
+    class Meta:
+        ordering = ['order']
+
+    def __str__(self):
+        return f"{self.module.title} - {self.title}"
+    
+    @property
+    def total_duration(self):
+        """Calculate total duration from all videos"""
+        total = sum(video.duration for video in self.videos.all())
+        return total
+
+
+class LessonVideo(models.Model):
+
+    """Model for storing multiple videos per lesson"""
+    VIDEO_POSITION_CHOICES = [
+        ('top', 'Top'),
+        ('bottom', 'Bottom'),
+        ('left', 'Left'),
+        ('right', 'Right'),
+        ('inline', 'Inline'),
+    ]
+
+    lesson = models.ForeignKey(Lesson, on_delete=models.CASCADE, related_name='videos')
+    title = models.CharField(max_length=255, blank=True, null=True, help_text="Video title/caption")
+    video_url = models.URLField(blank=True, null=True, help_text="External video URL (YouTube, Vimeo, etc.)")
+    video_file = models.FileField(
+        upload_to='lesson_videos/',
+        blank=True,
+        null=True,
+        help_text="Upload video file for secure streaming"
+    )
+    order = models.PositiveIntegerField(default=0, help_text="Display order of videos")
+    position = models.CharField(
+        max_length=10,
+        choices=VIDEO_POSITION_CHOICES,
+        default='top',
+        help_text="Where to place this video relative to content"
+    )
+    thumbnail = models.ImageField(upload_to='video_thumbnails/', blank=True, null=True)
+    duration = models.PositiveIntegerField(default=0, help_text="Duration in seconds")
+    is_preview = models.BooleanField(default=False, help_text="Allow preview for non-enrolled users")
+    
+    class Meta:
+        ordering = ['order']
+        unique_together = ['lesson', 'order']
+    
+    def __str__(self):
+        return f"{self.lesson.title} - Video {self.order + 1}"
+    
     @property
     def video_source(self):
         """Return the appropriate video source URL or file path"""
@@ -194,15 +241,31 @@ class Lesson(models.Model):
             return 'file'
         elif self.video_url:
             return 'url'
-        return None
+        return None 
 
+class LessonContentBlock(models.Model):
 
+    """Model for rich content blocks with embedded videos"""
+    BLOCK_TYPE_CHOICES = [
+        ('text', 'Text'),
+        ('video', 'Video'),
+        ('image', 'Image'),
+        ('quiz', 'Quiz'),
+        ('assignment', 'Assignment'),
+    ]
+
+    lesson = models.ForeignKey(Lesson, on_delete=models.CASCADE, related_name='content_blocks')
+    block_type = models.CharField(max_length=20, choices=BLOCK_TYPE_CHOICES, default='text')
+    content = models.TextField(blank=True, null=True, help_text="Text content or HTML")
+    video = models.ForeignKey(LessonVideo, on_delete=models.SET_NULL, null=True, blank=True, related_name='content_blocks')
+    order = models.PositiveIntegerField(default=0)
+    custom_css_class = models.CharField(max_length=255, blank=True, null=True)
+    
     class Meta:
         ordering = ['order']
-        # unique_together = ['module', 'order']
-
+    
     def __str__(self):
-        return f"{self.module.title} - {self.title}"
+        return f"{self.lesson.title} - Block {self.order + 1}: {self.block_type}"
 
 class CourseMaterial(models.Model):
     lesson = models.ForeignKey(Lesson, on_delete=models.CASCADE, related_name='materials_set')

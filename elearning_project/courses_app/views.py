@@ -4,16 +4,18 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny, IsAuthenticatedOrReadOnly
 from rest_framework.views import APIView
 from rest_framework.decorators import api_view, permission_classes
-from .models import Course, Category, CourseModule, Lesson, CourseMaterial, Enrollment, CourseProgress, Certificate
+from .models import Course, Category, CourseModule, Lesson, CourseMaterial, Enrollment, CourseProgress, Certificate, LessonContentBlock, LessonVideo
 from django.http import StreamingHttpResponse, HttpResponse
 from django.views.decorators.http import require_http_methods
 from wsgiref.util import FileWrapper
 import os
 from django.conf import settings
 from django.utils.encoding import smart_str
+from django.core.files.storage import default_storage
+from django.utils.crypto import get_random_string
 from .serializers import (
     CourseSerializer, CategorySerializer, CourseModuleSerializer,
-    LessonSerializer, CourseMaterialSerializer, EnrollmentSerializer, CourseProgressSerializer, CourseDetailSerializer, CourseCreateSerializer, CourseListSerializer, CertificateSerializer, CertificateCreateSerializer
+    LessonSerializer, CourseMaterialSerializer, EnrollmentSerializer, CourseProgressSerializer, CourseDetailSerializer, CourseCreateSerializer, CourseListSerializer, CertificateSerializer, CertificateCreateSerializer, LessonContentBlockSerializer, LessonVideoSerializer, LessonCreateUpdateSerializer
 )
 from registration_app.permissions import IsInstructor, IsAdminUser, IsStudent, CanEnrollInCourse
 from rest_framework import serializers
@@ -22,6 +24,49 @@ from django.http import JsonResponse, Http404
 from django.utils import timezone
 from registration_app.permissions import IsInstructor, IsStudent, IsAdminUser, CanEnrollInCourse
 from django.db.models import Q
+from django.middleware.csrf import get_token
+from django.views.decorators.csrf import ensure_csrf_cookie, csrf_exempt
+from django.views.decorators.http import require_GET
+from django.utils.decorators import method_decorator
+from django.views import View
+
+@require_GET
+@ensure_csrf_cookie
+def get_csrf_token(request):
+    """
+    Endpoint to set CSRF cookie and return token.
+    Call this before making POST requests from Next.js.
+    """
+    token = get_token(request)
+    return JsonResponse({
+        'detail': 'CSRF cookie set',
+        'csrfToken': token
+    })
+
+@method_decorator(ensure_csrf_cookie, name='dispatch')
+class CSRFTokenView(View):
+    """Class-based view for CSRF token"""
+    def get(self, request):
+        token = get_token(request)
+        return JsonResponse({
+            'csrfToken': token,
+            'detail': 'CSRF cookie set successfully'
+        })
+
+# Test endpoint (temporarily exempt from CSRF for testing)
+@csrf_exempt
+def test_csrf(request):
+    """Test endpoint to verify CSRF is working"""
+    if request.method == 'POST':
+        return JsonResponse({
+            'message': 'POST request received successfully',
+            'method': request.method,
+            'user': str(request.user)
+        })
+    return JsonResponse({
+        'message': 'Send a POST request to test CSRF',
+        'method': request.method
+    })
 
 class CategoryListCreateView(generics.ListCreateAPIView):
     queryset = Category.objects.all()
@@ -104,25 +149,170 @@ class CourseModuleCreateView(generics.ListCreateAPIView):
             raise PermissionDenied("You are not the instructor of this course.")
         serializer.save(course=course)
 
+class LessonVideoListCreateView(generics.ListCreateAPIView):
+    """List and create videos for a lesson"""
+    serializer_class = LessonVideoSerializer
+    permission_classes = [IsAuthenticated, IsInstructor]
+    
+    def get_queryset(self):
+        lesson_id = self.kwargs['lesson_id']
+        return LessonVideo.objects.filter(lesson_id=lesson_id)
+    
+    def perform_create(self, serializer):
+        lesson = get_object_or_404(Lesson, id=self.kwargs['lesson_id'])
+        if lesson.module.course.instructor != self.request.user:
+            raise PermissionDenied("You are not the instructor of this course.")
+        
+        # Get the next order number
+        next_order = lesson.videos.count()
+        serializer.save(lesson=lesson, order=next_order)
+
+class LessonVideoDetailView(generics.RetrieveUpdateDestroyAPIView):
+    """Retrieve, update, or delete a lesson video"""
+    queryset = LessonVideo.objects.all()
+    serializer_class = LessonVideoSerializer
+    permission_classes = [IsAuthenticated, IsInstructor]
+    
+    def get_queryset(self):
+        if self.request.user.role == 'instructor':
+            return LessonVideo.objects.filter(lesson__module__course__instructor=self.request.user)
+        return LessonVideo.objects.all()
+    
+class LessonVideoReorderView(APIView):
+    """Reorder videos within a lesson"""
+    permission_classes = [IsAuthenticated, IsInstructor]
+    
+    def post(self, request, lesson_id):
+        lesson = get_object_or_404(Lesson, id=lesson_id)
+        
+        if lesson.module.course.instructor != request.user:
+            raise PermissionDenied("You are not the instructor of this course.")
+        
+        order_data = request.data.get('videos', [])
+        
+        for item in order_data:
+            video_id = item.get('id')
+            order = item.get('order')
+            LessonVideo.objects.filter(id=video_id, lesson=lesson).update(order=order)
+        
+        return Response({"message": "Videos reordered successfully"})
+    
+class LessonVideoStreamView(APIView):
+    """Stream a specific video file with authentication"""
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request, video_id):
+        video = get_object_or_404(LessonVideo, id=video_id)
+        lesson = video.lesson
+        
+        # Check access
+        if not self._has_access(request.user, lesson):
+            return Response(
+                {"error": "You don't have access to this video"},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        # Check if it's a file upload
+        if not video.video_file:
+            return Response(
+                {"error": "No video file available"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        return self._stream_video(request, video.video_file.path, video.title or "video")
+    
+    def _has_access(self, user, lesson):
+        if not lesson.module.course.is_paid:
+            return True
+        
+        enrollment = Enrollment.objects.filter(
+            user=user,
+            course=lesson.module.course,
+            payment_status__in=['completed', 'free']
+        ).first()
+        
+        return enrollment is not None
+    
+    def _stream_video(self, request, file_path, filename):
+        file_size = os.path.getsize(file_path)
+        range_header = request.META.get('HTTP_RANGE', '').strip()
+        
+        import re
+        range_match = re.match(r'bytes=(\d+)-(\d+)?', range_header) if range_header else None
+        
+        if range_match:
+            start_byte = int(range_match.group(1))
+            end_byte = int(range_match.group(2)) if range_match.group(2) else file_size - 1
+            
+            if end_byte >= file_size:
+                end_byte = file_size - 1
+            
+            length = end_byte - start_byte + 1
+            
+            with open(file_path, 'rb') as f:
+                f.seek(start_byte)
+                data = f.read(length)
+            
+            response = HttpResponse(data, status=206, content_type='video/mp4')
+            response['Content-Range'] = f'bytes {start_byte}-{end_byte}/{file_size}'
+            response['Content-Length'] = str(length)
+            response['Accept-Ranges'] = 'bytes'
+        else:
+            response = HttpResponse(
+                FileWrapper(open(file_path, 'rb')),
+                content_type='video/mp4'
+            )
+            response['Content-Length'] = str(file_size)
+        
+        response['Content-Disposition'] = f'inline; filename="{smart_str(filename)}"'
+        response['Cache-Control'] = 'no-cache'
+        
+        return response
+
+# views.py - Update LessonCreateView to handle multipart/form-data
+
 class LessonCreateView(generics.ListCreateAPIView):
-    serializer_class = LessonSerializer
     permission_classes = [IsAuthenticated]
 
-    def get_permissions(self):
-        if self.request.method == 'GET':
-            return [IsAuthenticated()]
-        elif self.request.method == 'POST':
-            return [IsAuthenticated(), IsInstructor()]
-        return super().get_permissions()
+    def get_serializer_class(self):
+        if self.request.method == 'POST':
+            return LessonCreateUpdateSerializer
+        return LessonSerializer
 
     def get_queryset(self):
         module_id = self.kwargs['module_id']
         return Lesson.objects.filter(module_id=module_id)
 
-    def perform_create(self, serializer):
-        module = get_object_or_404(CourseModule, id=self.kwargs['module_id'])
-        if module.course.instructor != self.request.user:
+    def create(self, request, *args, **kwargs):
+        module_id = self.kwargs['module_id']
+        module = get_object_or_404(CourseModule, id=module_id)
+        
+        # Check if user is the instructor
+        if module.course.instructor != request.user:
             raise PermissionDenied("You are not the instructor of this course.")
+        
+        # Log the incoming data for debugging
+        print("Incoming request data:", request.data)
+        
+        # Create serializer with module in context
+        serializer = self.get_serializer(data=request.data, context={
+            'request': request, 
+            'module': module
+        })
+        
+        try:
+            serializer.is_valid(raise_exception=True)
+        except Exception as e:
+            print("Serializer errors:", serializer.errors)
+            raise e
+        
+        # Save with module
+        self.perform_create(serializer, module)
+        
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+
+    def perform_create(self, serializer, module):
         serializer.save(module=module)
 
 class CourseMaterialCreateView(generics.ListCreateAPIView):
@@ -312,6 +502,11 @@ class LessonRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
             return lesson
         except Lesson.DoesNotExist:
             raise Http404("Lesson not found or you don't have permission to access it.")
+
+    def get_permissions(self):
+        if self.request.method in ['PUT', 'PATCH', 'DELETE']:
+            return [IsAuthenticated(), IsInstructor()]
+        return super().get_permissions()
         
     def update(self, request, *args, **kwargs):
         partial = kwargs.pop('partial', False)
@@ -1227,3 +1422,115 @@ class CertificateByEnrollmentView(APIView):
                 {"error": str(e)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+        
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def upload_video(request):
+    """Handle video file uploads"""
+    try:
+        if 'video' not in request.FILES:
+            return Response({'error': 'No video file provided'}, status=400)
+        
+        video_file = request.FILES['video']
+        
+        # Validate file size (max 500MB)
+        if video_file.size > 500 * 1024 * 1024:
+            return Response({'error': 'Video file too large. Max size is 500MB'}, status=400)
+        
+        # Validate file type
+        allowed_types = ['video/mp4', 'video/webm', 'video/ogg', 'video/quicktime']
+        if video_file.content_type not in allowed_types:
+            return Response({'error': f'Invalid file type. Allowed types: {", ".join(allowed_types)}'}, status=400)
+        
+        # Generate a unique filename
+        ext = os.path.splitext(video_file.name)[1]
+        filename = f"videos/{get_random_string(32)}{ext}"
+        
+        # Save the file
+        saved_path = default_storage.save(filename, ContentFile(video_file.read()))
+        file_url = default_storage.url(saved_path)
+        
+        return Response({'url': file_url, 'filename': filename}, status=201)
+    except Exception as e:
+        return Response({'error': f'Failed to upload video: {str(e)}'}, status=500)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def upload_thumbnail(request):
+    """Handle thumbnail file uploads"""
+    try:
+        if 'thumbnail' not in request.FILES:
+            return Response({'error': 'No thumbnail file provided'}, status=400)
+        
+        thumbnail_file = request.FILES['thumbnail']
+        
+        # Validate file size (max 5MB)
+        if thumbnail_file.size > 5 * 1024 * 1024:
+            return Response({'error': 'Thumbnail file too large. Max size is 5MB'}, status=400)
+        
+        # Validate file type
+        allowed_types = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
+        if thumbnail_file.content_type not in allowed_types:
+            return Response({'error': f'Invalid file type. Allowed types: {", ".join(allowed_types)}'}, status=400)
+        
+        # Generate a unique filename
+        ext = os.path.splitext(thumbnail_file.name)[1]
+        filename = f"thumbnails/{get_random_string(32)}{ext}"
+        
+        # Save the file
+        saved_path = default_storage.save(filename, ContentFile(thumbnail_file.read()))
+        file_url = default_storage.url(saved_path)
+        
+        return Response({'url': file_url, 'filename': filename}, status=201)
+    except Exception as e:
+        return Response({'error': f'Failed to upload thumbnail: {str(e)}'}, status=500)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def upload_material(request):
+    """Handle course material file uploads"""
+    try:
+        if 'file' not in request.FILES:
+            return Response({'error': 'No file provided'}, status=400)
+        
+        material_file = request.FILES['file']
+        
+        # Validate file size (max 100MB)
+        if material_file.size > 100 * 1024 * 1024:
+            return Response({'error': 'File too large. Max size is 100MB'}, status=400)
+        
+        # Generate a unique filename
+        ext = os.path.splitext(material_file.name)[1]
+        filename = f"materials/{get_random_string(32)}{ext}"
+        
+        # Save the file
+        saved_path = default_storage.save(filename, ContentFile(material_file.read()))
+        file_url = default_storage.url(saved_path)
+        
+        return Response({'url': file_url, 'filename': filename}, status=201)
+    except Exception as e:
+        return Response({'error': f'Failed to upload file: {str(e)}'}, status=500)
+
+
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+def delete_file(request):
+    """Delete a file from storage"""
+    try:
+        file_url = request.data.get('file_url')
+        if not file_url:
+            return Response({'error': 'No file URL provided'}, status=400)
+        
+        # Extract the relative path from the URL
+        relative_path = file_url.replace(settings.MEDIA_URL, '')
+        
+        # Delete the file
+        if default_storage.exists(relative_path):
+            default_storage.delete(relative_path)
+            return Response({'message': 'File deleted successfully'}, status=200)
+        else:
+            return Response({'error': 'File not found'}, status=404)
+    except Exception as e:
+        return Response({'error': f'Failed to delete file: {str(e)}'}, status=500)

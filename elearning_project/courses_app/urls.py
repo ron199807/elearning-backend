@@ -8,7 +8,10 @@ from .views import (
     CourseSearchView,
     LessonRetrieveUpdateDestroyView,
     CourseModuleRetrieveUpdateDestroyView,
-    MarkLessonComplete, CourseProgressCreateView, EnrollmentProgressView, MarkCourseCompleteView, CertificateListView, CertificateCreateView, CertificateDetailView, VerifyCertificateView, CertificateByEnrollmentView
+    MarkLessonComplete, CourseProgressCreateView, EnrollmentProgressView, MarkCourseCompleteView, CertificateListView, CertificateCreateView, CertificateDetailView, VerifyCertificateView, CertificateByEnrollmentView, LessonVideoListCreateView,
+    LessonVideoDetailView,
+    LessonVideoReorderView,
+    LessonVideoStreamView,
 
 )
 
@@ -79,4 +82,16 @@ urlpatterns = [
     path('certificates/<str:certificate_id>/', CertificateDetailView.as_view(), name='certificate-detail'),
     path('certificates/verify/<str:verification_token>/', VerifyCertificateView.as_view(), name='verify-certificate'),
     path('certificates/enrollment/<int:enrollment_id>/', CertificateByEnrollmentView.as_view(), name='certificate-by-enrollment'),
+
+        # Lesson Videos URLs
+    path('lessons/<int:lesson_id>/videos/', LessonVideoListCreateView.as_view(), name='lesson-videos'),
+    path('lesson-videos/<int:pk>/', LessonVideoDetailView.as_view(), name='lesson-video-detail'),
+    path('lessons/<int:lesson_id>/videos/reorder/', LessonVideoReorderView.as_view(), name='lesson-videos-reorder'),
+    path('lesson-videos/<int:video_id>/stream/', LessonVideoStreamView.as_view(), name='lesson-video-stream'),
+
+    # File upload endpoints
+    path('upload/video/', views.upload_video, name='upload-video'),
+    path('upload/thumbnail/', views.upload_thumbnail, name='upload-thumbnail'),
+    path('upload/material/', views.upload_material, name='upload-material'),
+    path('upload/files/', views.delete_file, name='delete-file'),
 ]

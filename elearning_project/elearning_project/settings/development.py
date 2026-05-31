@@ -41,3 +41,5 @@ LOGGING = {
         },
     },
 }
+
+Root_URLCONF = 'elearning_project.urls.development'

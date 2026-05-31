@@ -1,227 +1,127 @@
+# admin.py
 from django.contrib import admin
-from django.contrib.auth.admin import UserAdmin
-from django.contrib.auth.models import User
-from import_export.admin import ImportExportModelAdmin
-from import_export import resources
-from .models import (
-    Category, Course, CourseModule, 
-    Lesson, CourseMaterial, Enrollment
-)
+from .models import Course, Category, CourseModule, Lesson, CourseMaterial, Enrollment, CourseProgress, Certificate, LessonVideo, LessonContentBlock
 
-# Custom admin site settings
-admin.site.site_header = "Course Platform Administration"
-admin.site.site_title = "Course Platform Admin Portal"
-admin.site.index_title = "Welcome to Course Platform Admin"
-
-# Resources for import/export
-class CourseResource(resources.ModelResource):
-    class Meta:
-        model = Course
-        fields = ('id', 'title', 'instructor__username', 'price', 'is_paid', 'duration', 'category__name')
-
-class EnrollmentResource(resources.ModelResource):
-    class Meta:
-        model = Enrollment
-        fields = ('id', 'user__username', 'course__title', 'enrolled_at', 'payment_status', 'completed')
-
-# Inline Admins
-class LessonInline(admin.StackedInline):
-    model = Lesson
+# Register LessonVideo inline for Lesson admin
+class LessonVideoInline(admin.TabularInline):
+    model = LessonVideo
     extra = 1
-    fields = ('title', 'order', 'video_url', 'content')
-    ordering = ('order',)
+    fields = ['title', 'video_url', 'video_file', 'order', 'position', 'duration', 'is_preview', 'thumbnail']
+    ordering = ['order']
 
-class CourseMaterialInline(admin.StackedInline):
-    model = CourseMaterial
+class LessonContentBlockInline(admin.TabularInline):
+    model = LessonContentBlock
     extra = 1
-    fields = ('title', 'file', 'description')
-    readonly_fields = ('uploaded_at',)
-    ordering = ('uploaded_at',)
+    fields = ['block_type', 'content', 'video', 'order', 'custom_css_class']
+    ordering = ['order']
 
-class EnrollmentInline(admin.TabularInline):
-    model = Enrollment
-    extra = 0
-    fields = ('course', 'enrolled_at', 'payment_status', 'completed')
-    readonly_fields = ('enrolled_at',)
-    can_delete = False
-
-# Custom User Admin
-class CustomUserAdmin(UserAdmin):
-    inlines = [EnrollmentInline]
-    list_display = ('username', 'email', 'first_name', 'last_name', 'is_staff', 'enrollment_count')
-    list_filter = ('is_staff', 'is_superuser', 'is_active', 'groups')
-    
-    def enrollment_count(self, obj):
-        return obj.enrollment_set.count()
-    enrollment_count.short_description = 'Enrollments'
-
-# First unregister the User model if it's already registered
-try:
-    admin.site.unregister(User)
-except admin.sites.NotRegistered:
-    pass
-
-# Then register with our custom admin
-admin.site.register(User, CustomUserAdmin)
-
-# Category Admin
-@admin.register(Category)
-class CategoryAdmin(admin.ModelAdmin):
-    list_display = ('name', 'created_at', 'course_count')
-    search_fields = ('name', 'description')
-   
-    def course_count(self, obj):
-        return obj.courses.count()
-    course_count.short_description = 'Courses'
-
-# Course Admin
-@admin.register(Course)
-class CourseAdmin(ImportExportModelAdmin):
-    resource_class = CourseResource
-    list_display = ('title', 'instructor', 'price', 'is_paid', 'student_count', 'created_at')
-    list_filter = ('is_paid', 'category', 'created_at')
-    search_fields = ('title', 'description', 'instructor__username')
-    filter_horizontal = ('students',)
-    prepopulated_fields = {'slug': ('title',)}
-    raw_id_fields = ('instructor',)
-    actions = ['make_free', 'make_paid']
-    
-    fieldsets = (
-        (None, {
-            'fields': ('title', 'slug', 'description', 'instructor')
-        }),
-        ('Media', {
-            'fields': ('image',)
-        }),
-        ('Pricing', {
-            'fields': ('price', 'is_paid')
-        }),
-        ('Metadata', {
-            'fields': ('category', 'duration', 'students')
-        }),
-    )
-    
-    def student_count(self, obj):
-        return obj.students.count()
-    student_count.short_description = 'Students'
-    
-    def make_free(self, request, queryset):
-        updated = queryset.update(price=0, is_paid=False)
-        self.message_user(request, f"{updated} courses were marked as free.")
-    make_free.short_description = "Mark selected courses as free"
-    
-    def make_paid(self, request, queryset):
-        updated = queryset.update(is_paid=True)
-        self.message_user(request, f"{updated} courses were marked as paid.")
-    make_paid.short_description = "Mark selected courses as paid"
-
-# Course Module Admin
-@admin.register(CourseModule)
-class CourseModuleAdmin(admin.ModelAdmin):
-    list_display = ('title', 'course', 'order', 'lesson_count')
-    list_filter = ('course',)
-    search_fields = ('title', 'course__title')
-    ordering = ('course', 'order')
-    inlines = [LessonInline]
-    
-    fieldsets = (
-        (None, {
-            'fields': ('course', 'title', 'order', 'description')
-        }),
-    )
-    
-    def lesson_count(self, obj):
-        return obj.lessons.count()
-    lesson_count.short_description = 'Lessons'
-
-# Lesson Admin
 @admin.register(Lesson)
 class LessonAdmin(admin.ModelAdmin):
-    list_display = ('title', 'module', 'course', 'order', 'material_count')
-    list_filter = ('module__course',)
-    search_fields = ('title', 'content', 'module__title')
-    ordering = ('module', 'order')
-    inlines = [CourseMaterialInline]
-    raw_id_fields = ('module',)
+    list_display = ['id', 'title', 'module', 'order', 'duration', 'is_published', 'is_preview']
+    list_filter = ['is_published', 'is_preview', 'module__course']
+    search_fields = ['title', 'content']
+    list_editable = ['order', 'is_published']
     
+    # Remove any reference to 'video_url' or 'video_file' here
     fieldsets = (
-        (None, {
-            'fields': ('module', 'title', 'order')
+        ('Basic Information', {
+            'fields': ('module', 'title', 'order', 'content', 'duration', 'is_published', 'is_preview', 'thumbnail')
         }),
-        ('Content', {
-            'fields': ('video_url', 'content')
+        ('Additional Info', {
+            'fields': (),
+            'classes': ('collapse',)
         }),
     )
     
-    def course(self, obj):
-        return obj.module.course
-    course.admin_order_field = 'module__course'
+    inlines = [LessonVideoInline, LessonContentBlockInline]
     
-    def material_count(self, obj):
-        return obj.materials.count()
-    material_count.short_description = 'Materials'
+    def get_form(self, request, obj=None, **kwargs):
+        form = super().get_form(request, obj, **kwargs)
+        # Remove any video_url field if it exists in the form
+        if 'video_url' in form.base_fields:
+            del form.base_fields['video_url']
+        if 'video_file' in form.base_fields:
+            del form.base_fields['video_file']
+        return form
 
-# Course Material Admin
+@admin.register(LessonVideo)
+class LessonVideoAdmin(admin.ModelAdmin):
+    list_display = ['id', 'lesson', 'title', 'order', 'position', 'duration', 'is_preview']
+    list_filter = ['position', 'is_preview', 'lesson__module__course']
+    search_fields = ['title', 'lesson__title']
+    list_editable = ['order', 'position']
+
+@admin.register(LessonContentBlock)
+class LessonContentBlockAdmin(admin.ModelAdmin):
+    list_display = ['id', 'lesson', 'block_type', 'order']
+    list_filter = ['block_type', 'lesson__module__course']
+    list_editable = ['order']
+
+@admin.register(Course)
+class CourseAdmin(admin.ModelAdmin):
+    list_display = ['id', 'title', 'instructor', 'price', 'is_paid', 'status', 'is_published', 'created_at']
+    list_filter = ['status', 'is_paid', 'is_published', 'level', 'language']
+    search_fields = ['title', 'subtitle', 'description', 'instructor__username']
+    list_editable = ['status', 'is_published']
+    readonly_fields = ['slug', 'created_at']
+    
+    fieldsets = (
+        ('Basic Information', {
+            'fields': ('title', 'subtitle', 'slug', 'description', 'category', 'instructor', 'image')
+        }),
+        ('Pricing', {
+            'fields': ('price', 'is_paid', 'has_discount', 'discount_price', 'discount_expiry', 'currency')
+        }),
+        ('Course Details', {
+            'fields': ('duration', 'language', 'level', 'status', 'is_published')
+        }),
+        ('Lists', {
+            'fields': ('learning_objectives', 'prerequisites', 'target_audience')
+        }),
+        ('Messages', {
+            'fields': ('welcome_message', 'completion_message'),
+            'classes': ('collapse',)
+        }),
+        ('Settings', {
+            'fields': ('is_public', 'allow_enrollment', 'certificate_available', 'featured', 'max_students'),
+            'classes': ('collapse',)
+        }),
+    )
+
+@admin.register(Category)
+class CategoryAdmin(admin.ModelAdmin):
+    list_display = ['id', 'name', 'created_at']
+    search_fields = ['name', 'description']
+
+@admin.register(CourseModule)
+class CourseModuleAdmin(admin.ModelAdmin):
+    list_display = ['id', 'title', 'course', 'order', 'is_published']
+    list_filter = ['course', 'is_published']
+    search_fields = ['title', 'course__title']
+    list_editable = ['order', 'is_published']
+
 @admin.register(CourseMaterial)
 class CourseMaterialAdmin(admin.ModelAdmin):
-    list_display = ('title', 'lesson', 'course', 'file_type', 'uploaded_at')
-    list_filter = ('lesson__module__course',)
-    search_fields = ('title', 'lesson__title')
-    date_hierarchy = 'uploaded_at'
-    raw_id_fields = ('lesson',)
-    
-    fieldsets = (
-        (None, {
-            'fields': ('lesson', 'title', 'file', 'description')
-        }),
-    )
-    
-    def course(self, obj):
-        return obj.lesson.module.course
-    course.admin_order_field = 'lesson__module__course'
-    
-    def file_type(self, obj):
-        if obj.file:
-            return obj.file.name.split('.')[-1].upper()
-        return "N/A"
-    file_type.short_description = 'Type'
+    list_display = ['id', 'title', 'lesson', 'uploaded_at', 'file']
+    list_filter = ['lesson__module__course']
+    search_fields = ['title', 'description']
 
-# Enrollment Admin
 @admin.register(Enrollment)
-class EnrollmentAdmin(ImportExportModelAdmin):
-    resource_class = EnrollmentResource
-    list_display = ('user', 'course', 'enrolled_at', 'payment_status', 'completed', 'days_since_enrollment')
-    list_filter = ('payment_status', 'completed', 'course')
-    search_fields = ('user__username', 'course__title', 'payment_reference')
-    date_hierarchy = 'enrolled_at'
-    raw_id_fields = ('user', 'course')
-    actions = ['mark_as_completed', 'mark_as_pending', 'mark_as_paid']
-    
-    fieldsets = (
-        (None, {
-            'fields': ('user', 'course')
-        }),
-        ('Status', {
-            'fields': ('payment_status', 'payment_reference', 'completed')
-        }),
-    )
-    
-    def days_since_enrollment(self, obj):
-        from django.utils.timezone import now
-        return (now() - obj.enrolled_at).days
-    days_since_enrollment.short_description = 'Days Enrolled'
-    
-    def mark_as_completed(self, request, queryset):
-        updated = queryset.update(payment_status='completed', completed=True)
-        self.message_user(request, f"{updated} enrollments were marked as completed.")
-    mark_as_completed.short_description = "Mark selected as completed"
-    
-    def mark_as_pending(self, request, queryset):
-        updated = queryset.update(payment_status='pending')
-        self.message_user(request, f"{updated} enrollments were marked as pending.")
-    mark_as_pending.short_description = "Mark selected as pending"
-    
-    def mark_as_paid(self, request, queryset):
-        updated = queryset.update(payment_status='completed')
-        self.message_user(request, f"{updated} enrollments were marked as paid.")
-    mark_as_paid.short_description = "Mark selected as paid"
+class EnrollmentAdmin(admin.ModelAdmin):
+    list_display = ['id', 'user', 'course', 'enrolled_at', 'completed', 'payment_status']
+    list_filter = ['completed', 'payment_status', 'course']
+    search_fields = ['user__username', 'course__title']
+    readonly_fields = ['enrolled_at', 'completed_at']
+
+@admin.register(CourseProgress)
+class CourseProgressAdmin(admin.ModelAdmin):
+    list_display = ['id', 'enrollment', 'lesson', 'completed', 'completed_at', 'time_spent']
+    list_filter = ['completed', 'enrollment__course']
+    search_fields = ['enrollment__user__username', 'lesson__title']
+
+@admin.register(Certificate)
+class CertificateAdmin(admin.ModelAdmin):
+    list_display = ['id', 'certificate_id', 'student_name', 'course_title', 'issued_at', 'is_verified']
+    list_filter = ['is_verified', 'issued_at']
+    search_fields = ['certificate_id', 'student_name', 'student_email', 'course_title']
+    readonly_fields = ['certificate_id', 'verification_token', 'issued_at']
