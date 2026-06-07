@@ -1,48 +1,34 @@
-﻿# Python
-env1/
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-.Python
-pip-log.txt
-pip-delete-this-directory.txt
+﻿# Git files
+.git
+.gitignore
+.gitattributes
 
-# Django
-*.log
-local_settings.py
-db.sqlite3
-db.sqlite3-journal
+# Virtual environment
+venv/
+env/
+.venv/
 
-# Elastic Beanstalk
-.elasticbeanstalk/*
-!.elasticbeanstalk/config.yml
-!.ebextensions/
-btee_ec2key.pem
-
-# IDE
+# IDE files
 .vscode/
 .idea/
-*.swp
-*.swo
+*.pyc
+__pycache__/
 
-# OS
+# Environment files
+.env
+.env.local
+
+# OS files
 .DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
 Thumbs.db
 
-# Git
-.git/
-.gitignore
+# Database
+*.sqlite3
+db.sqlite3
 
-# Node
-node_modules/
-npm-debug.log*
+# Media files (use S3 for production)
+media/
 
-# Media and static files (if you want to exclude, but usually need these)
-# media/
-# staticfiles/
+# Test files
+tests/
+*.test.py
