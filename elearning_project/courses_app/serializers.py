@@ -415,12 +415,17 @@ class LessonCreateUpdateSerializer(serializers.ModelSerializer):
         if not module:
             raise serializers.ValidationError({"module": "Module is required"})
         
+
+        # remove module from validated_data if it exists to avoid conflicts
+        validated_data.pop('module', None)
         # Create the lesson
         lesson = Lesson.objects.create(module=module, **validated_data)
         
         # Create videos
         for order, video_data in enumerate(videos_data):
-            video_data.pop('id', None)  # Remove id if present
+            video_data.pop('id', None)  # Removes id if present
+            # remove order from video_data to avoid conflicts with auto-generated order
+            video_data.pop('order', None)
             LessonVideo.objects.create(lesson=lesson, order=order, **video_data)
         
         # Create content blocks
@@ -706,63 +711,32 @@ class CourseProgressSerializer(serializers.ModelSerializer):
 
 
 class CertificateSerializer(serializers.ModelSerializer):
-    """Serializer for certificates"""
     verification_url = serializers.SerializerMethodField()
-    course_slug = serializers.SerializerMethodField()
-    platform_name = serializers.SerializerMethodField()
-    issued_date_formatted = serializers.SerializerMethodField()
     completion_date_formatted = serializers.SerializerMethodField()
+    issued_date_formatted = serializers.SerializerMethodField()
     
     class Meta:
         model = Certificate
         fields = [
-            'id',
-            'certificate_id',
-            'issued_at',
-            'verification_token',
-            'verification_url',
-            'is_verified',
-            
-            # Certificate data
-            'student_name',
-            'student_email',
-            'course_title',
-            'course_duration',
-            'instructor_name',
-            'completion_date',
-            'completion_date_formatted',
-            'course_description',
-            'grade',
-            'final_score',
-            'certificate_text',
-            
-            # Additional context
-            'course_slug',
-            'platform_name',
-            'issued_date_formatted',
-        ]
-        read_only_fields = [
-            'certificate_id', 'issued_at', 'verification_token',
-            'verification_url', 'is_verified'
+            'id', 'certificate_id', 'issued_at', 'verification_token', 
+            'verification_url', 'is_verified', 'student_name', 
+            'student_email', 'course_title', 'course_duration',
+            'instructor_name', 'completion_date', 'completion_date_formatted',
+            'course_description', 'grade', 'final_score', 'certificate_text',
+            'issued_date_formatted'
         ]
     
     def get_verification_url(self, obj):
         request = self.context.get('request')
         if request:
-            return f"{request.scheme}://{request.get_host()}/api/certificates/verify/{obj.verification_token}/"
-        return obj.verification_url
-    
-    def get_course_slug(self, obj):
-        return obj.enrollment.course.slug
-    
-    def get_platform_name(self, obj):
-        return "BTEE eLearning Platform"
-    
-    def get_issued_date_formatted(self, obj):
-        return obj.issued_at.strftime('%B %d, %Y')
+            return f"/api/certificates/verify/{obj.verification_token}/"
+        return f"/api/certificates/verify/{obj.verification_token}/"
     
     def get_completion_date_formatted(self, obj):
-        return obj.completion_date.strftime('%B %d, %Y')
+        return obj.completion_date.strftime('%B %d, %Y') if obj.completion_date else ''
+    
+    def get_issued_date_formatted(self, obj):
+        return obj.issued_at.strftime('%B %d, %Y') if obj.issued_at else ''
 
 class CertificateCreateSerializer(serializers.ModelSerializer):
     """Serializer for creating certificates"""

@@ -12,6 +12,7 @@ from .views import (
     LessonVideoDetailView,
     LessonVideoReorderView,
     LessonVideoStreamView,
+    get_certificate_by_course
 
 )
 
@@ -82,6 +83,7 @@ urlpatterns = [
     path('certificates/<str:certificate_id>/', CertificateDetailView.as_view(), name='certificate-detail'),
     path('certificates/verify/<str:verification_token>/', VerifyCertificateView.as_view(), name='verify-certificate'),
     path('certificates/enrollment/<int:enrollment_id>/', CertificateByEnrollmentView.as_view(), name='certificate-by-enrollment'),
+    path('certificates/course/<int:course_id>/', get_certificate_by_course, name='certificate-by-course'),
 
         # Lesson Videos URLs
     path('lessons/<int:lesson_id>/videos/', LessonVideoListCreateView.as_view(), name='lesson-videos'),
