@@ -6,9 +6,9 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-BASE_DIR = Path(__file__).resolve().parent.parent.parent
+BASE_DIR = Path(__file__).resolve().resolve().parent.parent.parent
 
-SECRET_KEY = os.getenv('DJANGO_SECRET_KEY')
+SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', os.getenv('SECRET_KEY'))  # Check both variable names
 
 # DEBUG = os.getenv('DJANGO_DEBUG', 'False').lower() == 'true'
 DEBUG = True  # Set to True for development, but should be False in production
@@ -76,8 +76,8 @@ MIDDLEWARE = [
 # CSRF & CORS SETTINGS - FIXED FOR ELASTIC BEANSTALK
 # ============================================
 
-# Define your Elastic Beanstalk domain
-EB_DOMAIN = 'elearning-api-env.eba-gjr4ta8a.us-east-1.elasticbeanstalk.com'
+# Define your Elastic Beanstalk domain - UPDATE THIS WITH YOUR ACTUAL DOMAIN
+EB_DOMAIN = os.getenv('EB_DOMAIN', 'elearning-api-env.eba-hsbcpwrw.us-west-2.elasticbeanstalk.com')
 EB_URL = f'http://{EB_DOMAIN}'
 
 # CSRF Trusted Origins - Add ALL possible variations
@@ -211,26 +211,46 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'elearning_project.wsgi.application'
 
-# Database configuration
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': os.getenv('POSTGRES_DB', 'elearningdb'),
-        'USER': os.getenv('POSTGRES_USER', 'postgres'),
-        'PASSWORD': os.getenv('POSTGRES_PASSWORD', ''),
-        'HOST': os.getenv('POSTGRES_HOST', 'localhost'),
-        'PORT': os.getenv('POSTGRES_PORT', '5432'),
-    }
+# ============================================
+# DATABASE CONFIGURATION - FIXED FOR ELASTIC BEANSTALK
+# ============================================
+
+# Check if we're on Elastic Beanstalk by looking for EB-specific environment variables
+IS_EB = os.getenv('EB_ENVIRONMENT') == 'true' or 'RDS_HOSTNAME' in os.environ
+
+# PostgreSQL configuration (for RDS or external PostgreSQL)
+POSTGRES_CONFIG = {
+    'ENGINE': 'django.db.backends.postgresql',
+    'NAME': os.getenv('POSTGRES_DB'),
+    'USER': os.getenv('POSTGRES_USER'),
+    'PASSWORD': os.getenv('POSTGRES_PASSWORD'),
+    'HOST': os.getenv('POSTGRES_HOST'),
+    'PORT': os.getenv('POSTGRES_PORT', '5432'),
 }
 
-# Fallback to SQLite if PostgreSQL credentials are missing
-if not all([os.getenv('POSTGRES_DB'), os.getenv('POSTGRES_USER'), os.getenv('POSTGRES_PASSWORD')]):
+# Check if we have all PostgreSQL credentials and host is not localhost
+has_postgres_creds = all([
+    POSTGRES_CONFIG['NAME'],
+    POSTGRES_CONFIG['USER'], 
+    POSTGRES_CONFIG['PASSWORD'],
+    POSTGRES_CONFIG['HOST']
+])
+
+# Don't use PostgreSQL if host is localhost on EB (since PostgreSQL isn't installed)
+if has_postgres_creds and POSTGRES_CONFIG['HOST'] != 'localhost':
+    DATABASES = {
+        'default': POSTGRES_CONFIG
+    }
+    print(f"Using PostgreSQL database at {POSTGRES_CONFIG['HOST']}")
+else:
+    # Fallback to SQLite
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.sqlite3',
             'NAME': BASE_DIR / 'db.sqlite3',
         }
     }
+    print("Using SQLite database (fallback)")
 
 AUTH_PASSWORD_VALIDATORS = [
     {
