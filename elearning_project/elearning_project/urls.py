@@ -9,6 +9,8 @@ from django.http import JsonResponse
 from django.middleware.csrf import get_token
 from django.conf import settings
 from django.conf.urls.static import static
+def health_check(request):
+    return JsonResponse({"status": "healthy", "message": "API is running"})
 
 # Import CSRF views from courses_app
 from courses_app.views import CSRFTokenView, get_csrf_token, test_csrf
@@ -46,6 +48,8 @@ def debug_csrf(request):
     })
 
 urlpatterns = [
+    path('health/', health_check, name='health_check'),
+    path('', health_check, name='home'),
     # Admin
     path('admin/', admin.site.urls),
     
