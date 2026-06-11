@@ -6,19 +6,36 @@ import os
 # ======================
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
-SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY")
+# For Elastic Beanstalk - load their env file
+from dotenv import load_dotenv
+load_dotenv(BASE_DIR / '.env.elasticbeanstalk')  # EB-specific env file
+load_dotenv(BASE_DIR / '.env')  # Fallback for local development
+
+# Get SECRET_KEY - try multiple methods
+SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY") or os.getenv("DJANGO_SECRET_KEY")
+
+if not SECRET_KEY:
+    # Last resort - read directly from EB config
+    try:
+        with open('/opt/elasticbeanstalk/deployment/env', 'r') as f:
+            for line in f:
+                if line.startswith('DJANGO_SECRET_KEY='):
+                    SECRET_KEY = line.split('=', 1)[1].strip().strip('"').strip("'")
+                    break
+    except:
+        pass
 
 if not SECRET_KEY:
     raise Exception("DJANGO_SECRET_KEY is not set in environment variables")
 
-DEBUG = os.getenv("DJANGO_DEBUG", "False").lower() == "true"
+DEBUG = os.environ.get("DJANGO_DEBUG", os.getenv("DJANGO_DEBUG", "False")).lower() == "true"
 
 # Clean ALLOWED_HOSTS (no duplicates, no '*')
 ALLOWED_HOSTS = [
     host.strip()
-    for host in os.getenv(
+    for host in os.environ.get(
         "ALLOWED_HOSTS",
-        "localhost,127.0.0.1"
+        os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1")
     ).split(",")
     if host.strip()
 ]
@@ -53,12 +70,9 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
-
     "corsheaders.middleware.CorsMiddleware",
-
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
-
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
@@ -66,23 +80,22 @@ MIDDLEWARE = [
 ]
 
 # ======================
-# CSRF + CORS (PRODUCTION CLEAN)
+# CSRF + CORS
 # ======================
-
 CSRF_TRUSTED_ORIGINS = [
     origin.strip()
-    for origin in os.getenv(
+    for origin in os.environ.get(
         "CSRF_TRUSTED_ORIGINS",
-        ""
+        os.getenv("CSRF_TRUSTED_ORIGINS", "")
     ).split(",")
     if origin.strip()
 ]
 
 CORS_ALLOWED_ORIGINS = [
     origin.strip()
-    for origin in os.getenv(
+    for origin in os.environ.get(
         "CORS_ALLOWED_ORIGINS",
-        ""
+        os.getenv("CORS_ALLOWED_ORIGINS", "")
     ).split(",")
     if origin.strip()
 ]
@@ -90,23 +103,19 @@ CORS_ALLOWED_ORIGINS = [
 CORS_ALLOW_CREDENTIALS = True
 
 # ======================
-# SECURITY (PRODUCTION SAFE)
+# SECURITY
 # ======================
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 USE_X_FORWARDED_HOST = True
 
-SECURE_SSL_REDIRECT = True
+# Disable SSL redirect for now (enable after HTTPS is set up)
+SECURE_SSL_REDIRECT = False  # Changed from True
 
-SESSION_COOKIE_SECURE = True
-CSRF_COOKIE_SECURE = True
+SESSION_COOKIE_SECURE = False  # Changed - set to True only with HTTPS
+CSRF_COOKIE_SECURE = False  # Changed - set to True only with HTTPS
 
 SESSION_COOKIE_SAMESITE = "Lax"
 CSRF_COOKIE_SAMESITE = "Lax"
-
-X_FRAME_OPTIONS = "DENY"
-
-SECURE_CONTENT_TYPE_NOSNIFF = True
-SECURE_BROWSER_XSS_FILTER = True
 
 # ======================
 # STATIC FILES
@@ -114,7 +123,9 @@ SECURE_BROWSER_XSS_FILTER = True
 STATIC_URL = "/static/"
 STATIC_ROOT = os.path.join(BASE_DIR, "staticfiles")
 
-STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
+# Only use Manifest storage if not DEBUG
+if not DEBUG:
+    STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 
 MEDIA_URL = "/media/"
 MEDIA_ROOT = os.path.join(BASE_DIR, "media")
@@ -141,18 +152,28 @@ TEMPLATES = [
 WSGI_APPLICATION = "elearning_project.wsgi.application"
 
 # ======================
-# DATABASE (PRODUCTION ONLY)
+# DATABASE
 # ======================
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": os.getenv("POSTGRES_DB"),
-        "USER": os.getenv("POSTGRES_USER"),
-        "PASSWORD": os.getenv("POSTGRES_PASSWORD"),
-        "HOST": os.getenv("POSTGRES_HOST"),
-        "PORT": os.getenv("POSTGRES_PORT", "5432"),
+# Check for PostgreSQL credentials
+if os.environ.get("POSTGRES_HOST") or os.getenv("POSTGRES_HOST"):
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": os.environ.get("POSTGRES_DB") or os.getenv("POSTGRES_DB"),
+            "USER": os.environ.get("POSTGRES_USER") or os.getenv("POSTGRES_USER"),
+            "PASSWORD": os.environ.get("POSTGRES_PASSWORD") or os.getenv("POSTGRES_PASSWORD"),
+            "HOST": os.environ.get("POSTGRES_HOST") or os.getenv("POSTGRES_HOST"),
+            "PORT": os.environ.get("POSTGRES_PORT") or os.getenv("POSTGRES_PORT", "5432"),
+        }
     }
-}
+else:
+    # Fallback to SQLite
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": BASE_DIR / "db.sqlite3",
+        }
+    }
 
 # ======================
 # REST FRAMEWORK
