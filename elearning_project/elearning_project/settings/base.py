@@ -1,15 +1,15 @@
 from pathlib import Path
 import os
-from dotenv import load_dotenv
-
-load_dotenv()
 
 # ======================
 # BASE
 # ======================
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
-SECRET_KEY = os.getenv("DJANGO_SECRET_KEY")
+SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY")
+
+if not SECRET_KEY:
+    raise Exception("DJANGO_SECRET_KEY is not set in environment variables")
 
 DEBUG = os.getenv("DJANGO_DEBUG", "False").lower() == "true"
 
@@ -205,3 +205,5 @@ USE_TZ = True
 # DEFAULT AUTO FIELD
 # ======================
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+ROOT_URLCONF = "elearning_project.urls"
