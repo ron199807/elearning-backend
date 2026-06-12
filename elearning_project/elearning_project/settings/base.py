@@ -228,3 +228,4 @@ USE_TZ = True
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 ROOT_URLCONF = "elearning_project.urls"
+INSTRUCTOR_USERNAME = "instructor_user"
