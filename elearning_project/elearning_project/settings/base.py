@@ -35,7 +35,10 @@ ALLOWED_HOSTS = [
     host.strip()
     for host in os.environ.get(
         "ALLOWED_HOSTS",
-        os.getenv("ALLOWED_HOSTS", "api.btee-zm.com,localhost,127.0.0.1,.elasticbeanstalk.com,.amazonaws.com")
+        os.getenv(
+            "ALLOWED_HOSTS",
+            "api.btee-zm.com,localhost,127.0.0.1,.elasticbeanstalk.com,.amazonaws.com",
+        ),
     ).split(",")
     if host.strip()
 ]
@@ -86,7 +89,10 @@ CSRF_TRUSTED_ORIGINS = [
     origin.strip()
     for origin in os.environ.get(
         "CSRF_TRUSTED_ORIGINS",
-        os.getenv("CSRF_TRUSTED_ORIGINS", "")
+        os.getenv(
+            "CSRF_TRUSTED_ORIGINS",
+            "https://www.btee-zm.com,https://api.btee-zm.com,https://btee-lms.vercel.app",
+        ),
     ).split(",")
     if origin.strip()
 ]
@@ -95,7 +101,10 @@ CORS_ALLOWED_ORIGINS = [
     origin.strip()
     for origin in os.environ.get(
         "CORS_ALLOWED_ORIGINS",
-        os.getenv("CORS_ALLOWED_ORIGINS", "")
+        os.getenv(
+            "CORS_ALLOWED_ORIGINS",
+            "https://www.btee-zm.com,https://btee-lms.vercel.app,http://localhost:3000",
+        ),
     ).split(",")
     if origin.strip()
 ]
